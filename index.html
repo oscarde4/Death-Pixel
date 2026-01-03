@@ -189,7 +189,7 @@ function spawnPixel(strong=false,doubleSpeed=false,whiteShooter=false){
   });
 }
 
-function spawnRainbow(){if(!gameRunning) return; pixels.push({x: Math.random()*w,y:Math.random()*h,size:12,speed:0,color:'rainbow',rainbow:true});}
+function spawnRainbow(){if(!gameRunning) return; pixels.push({x:Math.random()*w,y:Math.random()*h,size:12,speed:0,color:'rainbow',rainbow:true});}
 
 // ------------------ RESET ------------------
 function resetGame(){
@@ -259,6 +259,7 @@ function draw(){
 function update(){
   if(gameOver) return;
 
+  // update pixels
   pixels.forEach((p,i)=>{
     if(p.rainbow){
       let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
@@ -269,19 +270,23 @@ function update(){
       return;
     }
 
+    // move towards player
     if(!p.whiteShooter){
       let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
       p.x+=dx/d*p.speed; p.y+=dy/d*p.speed;
 
       if(d<player.size/2+p.size/2){
-        if(player.rainbow){
+        if(player.rainbow && !p.doubleSpeed) {
+          pixels.splice(i,1);
           if(p.color==='red') score+=1;
           if(p.color==='blue') score+=5;
           if(p.color==='white') score+=10;
-          pixels.splice(i,1);
-        } else gameOver=true;
+        } else if(!p.whiteShooter){
+          gameOver=true;
+        }
       }
     } else {
+      // white shooter arrows
       if(Date.now()-p.shootTimer>1500){
         let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
         arrows.push({x:p.x,y:p.y,vx:dx/d*5,vy:dy/d*5,size:6});
@@ -290,6 +295,7 @@ function update(){
     }
   });
 
+  // update arrows
   arrows.forEach((a,ai)=>{
     a.x+=a.vx; a.y+=a.vy;
     let dx=player.x-a.x; let dy=player.y-a.y; let d=Math.sqrt(dx*dx+dy*dy);
@@ -297,17 +303,13 @@ function update(){
     if(a.x<0||a.x>w||a.y<0||a.y>h) arrows.splice(ai,1);
   });
 
+  // timers
   if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
 
-  // --- SPAWN LOGIC ---
-  // Normal red pixels
-  if(Math.random()<0.005) spawnPixel(); 
+  if(score>=50 && !strongUnlocked){strongUnlocked=true; for(let i=0;i<2;i++) spawnPixel(true);}
+  if(score>=100 && Math.random()<0.002) spawnPixel(false,false,true);
 
-  // Blue pixels spawn at score >=50, rare
-  if(score>=50 && Math.random()<0.001) spawnPixel(true);
-
-  // White shooters spawn at score >=100, very rare
-  if(score>=100 && Math.random()<0.0005) spawnPixel(false,false,true);
+  if(Math.random()<0.002) spawnPixel();
 }
 
 // ------------------ LOOP ------------------
