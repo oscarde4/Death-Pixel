@@ -119,6 +119,7 @@ let pixels = [];
 let arrows = [];
 let gameOver = false;
 let gameRunning = false;
+let bestScore = 0; // NEW: Best Score
 
 // ------------------ PLAYER ------------------
 let player = {x: w/2, y: h/2, size: 10, color: 'red', speed: 1, rainbow: false, rainbowTimer: 0};
@@ -153,8 +154,10 @@ function saveProgress(){
     localStorage.setItem('dp_ownedSkins', JSON.stringify(ownedSkins));
     localStorage.setItem('dp_selectedSkin', selectedSkin);
     localStorage.setItem('dp_rewardRedeemed', rewardRedeemed);
+    localStorage.setItem('dp_bestScore', bestScore); // NEW: Save best score
   } catch(e){ console.warn("LocalStorage not available"); }
 }
+
 function loadProgress(){
   try{
     let pts = localStorage.getItem('dp_points');
@@ -168,6 +171,9 @@ function loadProgress(){
 
     let rr = localStorage.getItem('dp_rewardRedeemed');
     if(rr) rewardRedeemed = (rr==='true');
+
+    let bs = localStorage.getItem('dp_bestScore'); // NEW: Load best score
+    if(bs) bestScore = parseInt(bs);
   } catch(e){ console.warn("LocalStorage not available"); }
 
   player.color = selectedSkin;
@@ -235,8 +241,11 @@ function draw(){
   ctx.textAlign='left';
   ctx.fillText('Score: '+score,10,30);
   ctx.fillText('Points: '+totalPoints,10,60);
+  ctx.fillText('Best Score: '+bestScore,10,90); // NEW: display best score
 
   if(gameOver){
+    if(score > bestScore){ bestScore = score; saveProgress(); } // NEW: update best score
+
     ctx.fillStyle='rgba(0,0,0,0.6)';
     ctx.fillRect(w/2-180,h/2-80,360,120);
     ctx.fillStyle='white';
@@ -270,7 +279,6 @@ function update(){
       return;
     }
 
-    // move towards player
     if(!p.whiteShooter){
       let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
       p.x+=dx/d*p.speed; p.y+=dy/d*p.speed;
@@ -286,7 +294,6 @@ function update(){
         }
       }
     } else {
-      // white shooter arrows
       if(Date.now()-p.shootTimer>1500){
         let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
         arrows.push({x:p.x,y:p.y,vx:dx/d*5,vy:dy/d*5,size:6});
@@ -303,7 +310,6 @@ function update(){
     if(a.x<0||a.x>w||a.y<0||a.y>h) arrows.splice(ai,1);
   });
 
-  // timers
   if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
 
   if(score>=50 && !strongUnlocked){strongUnlocked=true; for(let i=0;i<2;i++) spawnPixel(true);}
