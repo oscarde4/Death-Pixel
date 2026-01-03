@@ -2,354 +2,292 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dead Pixel</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
 html,body{margin:0;padding:0;overflow:hidden;background:black;}
 canvas{display:block;}
 button{
   position:absolute;
-  left:50%;
-  transform:translateX(-50%);
-  padding:12px 24px;
+  padding:10px 20px;
   font-size:18px;
-  border:none;
-  border-radius:10px;
-  cursor:pointer;
-  z-index:5;
-  color:white;
-}
-#playBtn{top:40%;background:red;}
-#retryBtn,#shopBtn,#cheatBtn{display:none;}
-#retryBtn{background:red;}
-#shopBtn{background:blue;}
-#cheatBtn{background:green;}
-
-/* Shop UI */
-#shopOverlay{
-  position:absolute;
-  inset:0;
-  background:rgba(0,0,0,0.9);
-  z-index:10;
-  display:none;
-  color:white;
-  text-align:center;
-}
-#shopList{
-  max-height:70vh;
-  overflow-y:auto;
-}
-.skinBtn{
-  display:block;
-  margin:12px auto;
-  padding:12px;
-  width:220px;
-  font-size:18px;
-  background:#222;
+  background:red;
   color:white;
   border:none;
   border-radius:8px;
+  cursor:pointer;
+  z-index:3;
+}
+#playBtn{top:40%;left:50%;transform:translateX(-50%)}
+#retryBtn,#shopBtn,#cheatBtn{
+  display:none;
+  left:50%;
+  transform:translateX(-50%);
+}
+#shopBtn{background:blue;}
+#cheatBtn{background:green;}
+
+#shopOverlay{
+  display:none;
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  color:white;
+  z-index:5;
+  overflow-y:auto;
+  padding:20px;
+}
+.skinBtn{
+  width:220px;
+  padding:12px;
+  margin:12px auto;
+  display:block;
+  font-size:18px;
+  background:#222;
+  color:white;
+  border-radius:10px;
+  border:none;
   cursor:pointer;
 }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
+
+<canvas id="c"></canvas>
 
 <button id="playBtn">Play</button>
 <button id="retryBtn">Retry</button>
 <button id="shopBtn">Shop</button>
-<button id="cheatBtn">Cheat</button>
+<button id="cheatBtn">Cheat Code</button>
 
 <div id="shopOverlay">
-  <h2>Shop</h2>
-  <p>Points: <span id="pointsText">0</span></p>
-  <div id="shopList"></div>
-  <button class="skinBtn" id="closeShop">Close</button>
+  <h2 style="text-align:center;">Shop</h2>
+  <p style="text-align:center;">Points: <span id="pointsDisplay">0</span></p>
+  <div id="shopContainer"></div>
+  <button id="closeShopBtn" class="skinBtn">Close Shop</button>
 </div>
 
 <script>
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
-canvas.width=innerWidth;
-canvas.height=innerHeight;
+/* ---------- CANVAS ---------- */
+const c = document.getElementById("c");
+const ctx = c.getContext("2d");
+let w = c.width = innerWidth;
+let h = c.height = innerHeight;
 
-// Buttons
-const playBtn=document.getElementById("playBtn");
-const retryBtn=document.getElementById("retryBtn");
-const shopBtn=document.getElementById("shopBtn");
-const cheatBtn=document.getElementById("cheatBtn");
-const shopOverlay=document.getElementById("shopOverlay");
-const shopList=document.getElementById("shopList");
-const pointsText=document.getElementById("pointsText");
-const closeShop=document.getElementById("closeShop");
+/* ---------- UI ---------- */
+const playBtn = document.getElementById("playBtn");
+const retryBtn = document.getElementById("retryBtn");
+const shopBtn = document.getElementById("shopBtn");
+const cheatBtn = document.getElementById("cheatBtn");
+const shopOverlay = document.getElementById("shopOverlay");
+const shopContainer = document.getElementById("shopContainer");
+const closeShopBtn = document.getElementById("closeShopBtn");
+const pointsDisplay = document.getElementById("pointsDisplay");
 
-// ---------------- STATE ----------------
-let gameRunning=false;
-let gameOver=false;
-let score=0;
+/* ---------- GAME STATE ---------- */
+let gameRunning=false, gameOver=false;
+let score=0, totalPoints=0;
 let pixels=[];
-let arrows=[];
 
-// ---------------- PLAYER ----------------
-let player={x:canvas.width/2,y:canvas.height/2,size:10,color:"red",rainbow:false,rainbowTimer:0};
+/* ---------- PLAYER ---------- */
+const player={
+  x:w/2,y:h/2,size:10,color:"red",speed:1,
+  rainbow:false,rainbowTimer:0
+};
 
-// ---------------- CHEATS ----------------
-let usedCheatCodes=JSON.parse(localStorage.getItem("usedCheatCodes")||"[]");
-let isBurger=false;
-const burgerImg=new Image();
-burgerImg.src="burger.png";
-
-// ---------------- SKINS ----------------
+/* ---------- SKINS ---------- */
 const skins=[
-  {name:"Red",color:"red",cost:0},
-  {name:"Blue",color:"blue",cost:50},
-  {name:"Green",color:"green",cost:75},
-  {name:"Purple",color:"purple",cost:100},
-  {name:"Cyan",color:"cyan",cost:150},
-  {name:"Yellow",color:"yellow",cost:200},
-  {name:"White",color:"white",cost:300},
-  {name:"Black",color:"black",cost:500}
+ {name:"Red",color:"red",cost:0},
+ {name:"Blue",color:"blue",cost:50},
+ {name:"Green",color:"green",cost:75},
+ {name:"Purple",color:"purple",cost:100},
+ {name:"Cyan",color:"cyan",cost:150},
+ {name:"Yellow",color:"yellow",cost:200},
+ {name:"White",color:"white",cost:300},
+ {name:"Black",color:"black",cost:500}
 ];
+let ownedSkins=["Red"];
+let selectedSkin="Red";
 
-let ownedSkins=JSON.parse(localStorage.getItem("ownedSkins")||'["Red"]');
-let selectedSkin=localStorage.getItem("selectedSkin")||"Red";
-let totalPoints=parseInt(localStorage.getItem("points")||0);
-let bestScore=parseInt(localStorage.getItem("bestScore")||0);
-pointsText.textContent=totalPoints;
+/* ---------- CHEAT CODES (LIMITED PER CODE) ---------- */
+const cheatCodes={
+  "REWARDXD":200,
+  "BONUS50":50,
+  "PIXEL100":100
+};
+let usedCheatCodes=[];
 
-// ---------------- SAVE ----------------
+/* ---------- SAVE / LOAD ---------- */
 function save(){
-  localStorage.setItem("points",totalPoints);
-  localStorage.setItem("ownedSkins",JSON.stringify(ownedSkins));
-  localStorage.setItem("selectedSkin",selectedSkin);
-  localStorage.setItem("usedCheatCodes",JSON.stringify(usedCheatCodes));
-  localStorage.setItem("bestScore",bestScore);
+ localStorage.setItem("dp_points",totalPoints);
+ localStorage.setItem("dp_owned",JSON.stringify(ownedSkins));
+ localStorage.setItem("dp_skin",selectedSkin);
+ localStorage.setItem("dp_usedCodes",JSON.stringify(usedCheatCodes));
+}
+function load(){
+ totalPoints=+localStorage.getItem("dp_points")||0;
+ ownedSkins=JSON.parse(localStorage.getItem("dp_owned"))||["Red"];
+ selectedSkin=localStorage.getItem("dp_skin")||"Red";
+ usedCheatCodes=JSON.parse(localStorage.getItem("dp_usedCodes"))||[];
+ player.color=selectedSkin;
+ pointsDisplay.textContent=totalPoints;
+}
+load();
+
+/* ---------- PIXELS ---------- */
+function spawnRed(){
+ pixels.push({x:Math.random()*w,y:Math.random()*h,size:10,speed:1,color:"red",type:"red"});
+}
+function spawnBlue(){
+ pixels.push({x:Math.random()*w,y:Math.random()*h,size:14,speed:1.3,color:"blue",type:"blue"});
+}
+function spawnWhite(){
+ pixels.push({x:Math.random()*w,y:Math.random()*h,size:18,speed:0.8,color:"white",type:"white"});
+}
+function spawnRainbow(){
+ pixels.push({x:Math.random()*w,y:Math.random()*h,size:14,speed:0,type:"rainbow"});
 }
 
-// ---------------- SPAWN ----------------
-function spawnPixel(type="red"){
-  let size=type==="blue"?18:type==="white"?26:10;
-  let speed=type==="red"?1:type==="blue"?2:0;
-  pixels.push({
-    x:Math.random()*canvas.width,
-    y:Math.random()*canvas.height,
-    size,
-    speed,
-    type
-  });
+/* ---------- RESET ---------- */
+function reset(){
+ pixels=[];
+ score=0;
+ gameOver=false;
+ player.x=w/2;player.y=h/2;
+ player.rainbow=false;
+ retryBtn.style.display="none";
+ shopBtn.style.display="none";
+ cheatBtn.style.display="none";
+ spawnRed();
 }
 
-function spawnArrow(x,y){
-  let dx=player.x-x;
-  let dy=player.y-y;
-  let dist=Math.hypot(dx,dy);
-  arrows.push({x,y,vx:dx/dist*4,vy:dy/dist*4,size:6});
-}
-
-// ---------------- DRAW ----------------
-function draw(){
-  ctx.fillStyle="rgba(0,0,0,0.25)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  // pixels
-  pixels.forEach(p=>{
-    ctx.fillStyle=p.type;
-    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
-  });
-
-  // arrows
-  arrows.forEach(a=>{
-    ctx.fillStyle="white";
-    ctx.fillRect(a.x-a.size/2,a.y-a.size/2,a.size,a.size);
-  });
-
-  // player
-  if(isBurger){
-    ctx.drawImage(burgerImg,player.x-20,player.y-20,40,40);
-  }else if(player.rainbow){
-    let g=ctx.createLinearGradient(player.x-5,player.y-5,player.x+5,player.y+5);
-    ["red","orange","yellow","green","blue","purple"].forEach((c,i)=>g.addColorStop(i/5,c));
-    ctx.fillStyle=g;
-    ctx.fillRect(player.x-5,player.y-5,10,10);
-  }else{
-    ctx.fillStyle=selectedSkin.toLowerCase();
-    ctx.fillRect(player.x-5,player.y-5,10,10);
-  }
-
-  // HUD
-  ctx.fillStyle="white";
-  ctx.font="20px Arial";
-  ctx.fillText("Score: "+score,10,30);
-  ctx.fillText("Points: "+totalPoints,10,60);
-  ctx.fillText("Best: "+bestScore,10,90);
-
-  if(gameOver){
-    retryBtn.style.display="block";
-    shopBtn.style.display="block";
-    cheatBtn.style.display="block";
-    retryBtn.style.top="55%";
-    shopBtn.style.top="63%";
-    cheatBtn.style.top="71%";
-  }
-}
-
-// ---------------- UPDATE ----------------
+/* ---------- UPDATE ---------- */
 function update(){
-  if(gameOver) return;
-
-  // pixel movement
-  pixels.forEach((p,i)=>{
-    if(p.type!=="white"){
-      let dx=player.x-p.x;
-      let dy=player.y-p.y;
-      let dist=Math.hypot(dx,dy);
-      p.x+=dx/dist*p.speed;
-      p.y+=dy/dist*p.speed;
-
-      if(player.rainbow && dist<p.size/2+player.size/2){
-        // gain points
-        if(p.type==="red") score++; 
-        else if(p.type==="blue") score+=5;
-        else if(p.type==="white") score+=10;
-        pixels.splice(i,1);
-      }else if(dist<p.size/2+player.size/2 && !player.rainbow){
-        gameOver=true;
-      }
-    }else{
-      // white pixel shoots
-      if(Math.random()<0.01){
-        spawnArrow(p.x,p.y);
-      }
+ pixels.forEach((p,i)=>{
+  if(p.type==="rainbow"){
+    if(dist(p,player)<15){
+      player.rainbow=true;
+      player.rainbowTimer=Date.now();
+      pixels.splice(i,1);
     }
-  });
-
-  // arrow collision
-  arrows.forEach((a,ai)=>{
-    a.x+=a.vx;
-    a.y+=a.vy;
-    let dx=a.x-player.x;
-    let dy=a.y-player.y;
-    if(Math.hypot(dx,dy)<player.size/2){
-      if(!player.rainbow) gameOver=true;
-      arrows.splice(ai,1);
-    }
-    if(a.x<0||a.x>canvas.width||a.y<0||a.y>canvas.height) arrows.splice(ai,1);
-  });
-
-  // spawn pixels
-  if(Math.random()<0.01) spawnPixel("red");
-  if(score>=50 && Math.random()<0.004) spawnPixel("blue");
-  if(score>=100 && Math.random()<0.002) spawnPixel("white");
-
-  // rainbow effect timer
-  if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
-
-  // survival points
-  if(Date.now()%1000<20) score++; // roughly 1 point per sec
-}
-
-// ---------------- LOOP ----------------
-function loop(){
-  if(!gameRunning) return;
-  update();
-  draw();
-  if(!gameOver) requestAnimationFrame(loop);
-  else{
-    if(score>bestScore) bestScore=score;
-    totalPoints+=score;
-    save();
+    return;
   }
+  let dx=player.x-p.x, dy=player.y-p.y;
+  let d=Math.hypot(dx,dy);
+  p.x+=dx/d*p.speed;
+  p.y+=dy/d*p.speed;
+
+  if(d<player.size+p.size){
+    if(player.rainbow){
+      if(p.type==="red") score+=1;
+      if(p.type==="blue") score+=5;
+      if(p.type==="white") score+=10;
+      pixels.splice(i,1);
+    } else gameOver=true;
+  }
+ });
+ if(player.rainbow && Date.now()-player.rainbowTimer>25000)
+   player.rainbow=false;
 }
 
-// ---------------- TOUCH ----------------
-canvas.addEventListener("touchmove",e=>{
-  e.preventDefault();
-  player.x=e.touches[0].clientX;
-  player.y=e.touches[0].clientY;
-},{passive:false});
+/* ---------- DRAW ---------- */
+function draw(){
+ ctx.fillStyle="rgba(0,0,0,.3)";
+ ctx.fillRect(0,0,w,h);
 
-// ---------------- BUTTONS ----------------
+ pixels.forEach(p=>{
+  if(p.type==="rainbow"){
+    let g=ctx.createLinearGradient(p.x-6,p.y-6,p.x+6,p.y+6);
+    ["red","yellow","green","cyan","blue","purple"].forEach((c,i)=>g.addColorStop(i/5,c));
+    ctx.fillStyle=g;
+  } else ctx.fillStyle=p.color;
+  ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+ });
+
+ ctx.fillStyle=player.color;
+ ctx.fillRect(player.x-5,player.y-5,10,10);
+
+ ctx.fillStyle="white";
+ ctx.fillText("Score: "+score,10,20);
+ ctx.fillText("Points: "+totalPoints,10,40);
+
+ if(gameOver){
+  retryBtn.style.display=shopBtn.style.display=cheatBtn.style.display="block";
+  retryBtn.style.top=h/2+40+"px";
+  shopBtn.style.top=h/2+100+"px";
+  cheatBtn.style.top=h/2+160+"px";
+ }
+}
+
+/* ---------- LOOP ---------- */
+function loop(){
+ if(!gameRunning)return;
+ update();draw();
+ if(!gameOver)requestAnimationFrame(loop);
+}
+
+/* ---------- CONTROLS ---------- */
+c.onmousemove=e=>{player.x=e.clientX;player.y=e.clientY;}
+c.ontouchmove=e=>{player.x=e.touches[0].clientX;player.y=e.touches[0].clientY;e.preventDefault();}
+
+/* ---------- BUTTONS ---------- */
 playBtn.onclick=()=>{
-  gameRunning=true;
-  gameOver=false;
-  score=0;
-  pixels=[];
-  arrows=[];
-  player.x=canvas.width/2;
-  player.y=canvas.height/2;
-  playBtn.style.display="none";
-  retryBtn.style.display="none";
-  shopBtn.style.display="none";
-  cheatBtn.style.display="none";
-  loop();
+ gameRunning=true;
+ playBtn.style.display="none";
+ reset();
+ setInterval(()=>spawnRed(),3000);
+ setInterval(()=>{if(score>=50)spawnBlue()},5000);
+ setInterval(()=>{if(score>=100)spawnWhite()},8000);
+ setInterval(()=>{if(Math.random()<.02)spawnRainbow()},1000);
+ setInterval(()=>{if(!gameOver)score++},1000);
+ loop();
 };
 
 retryBtn.onclick=()=>{
-  gameRunning=true;
-  gameOver=false;
-  score=0;
-  pixels=[];
-  arrows=[];
-  player.x=canvas.width/2;
-  player.y=canvas.height/2;
-  retryBtn.style.display="none";
-  shopBtn.style.display="none";
-  cheatBtn.style.display="none";
-  loop();
+ totalPoints+=score;
+ save();
+ reset();
 };
 
 cheatBtn.onclick=()=>{
-  let code=prompt("Enter cheat code:");
-  if(!code) return;
-  code=code.toUpperCase();
-  if(usedCheatCodes.includes(code)){
-    alert("Code already used!");
-    return;
-  }
-  if(code==="HUNGRY"){
-    isBurger=true;
-  }else{
-    alert("Invalid code");
-    return;
-  }
-  usedCheatCodes.push(code);
-  save();
-  alert("Cheat activated!");
+ let code=prompt("Enter code:");
+ if(!code)return;
+ code=code.toUpperCase();
+ if(!cheatCodes[code]) return alert("Invalid code");
+ if(usedCheatCodes.includes(code)) return alert("Code already used");
+ totalPoints+=cheatCodes[code];
+ usedCheatCodes.push(code);
+ save();
+ pointsDisplay.textContent=totalPoints;
+ alert("Code redeemed!");
 };
 
-// ---------------- SHOP ----------------
 shopBtn.onclick=()=>{
-  shopOverlay.style.display="block";
-  shopList.innerHTML="";
-  pointsText.textContent=totalPoints;
-
-  skins.forEach(s=>{
-    let btn=document.createElement("button");
-    btn.className="skinBtn";
-    let owned=ownedSkins.includes(s.name);
-    btn.textContent=owned ? `${s.name} (Owned)` : `${s.name} - ${s.cost} pts`;
-
-    btn.onclick=()=>{
-      if(!owned && totalPoints>=s.cost){
-        totalPoints-=s.cost;
-        ownedSkins.push(s.name);
-      }
-      selectedSkin=s.name;
-      save();
-      shopBtn.onclick(); // refresh
-    };
-    shopList.appendChild(btn);
-  });
+ shopOverlay.style.display="block";
+ shopContainer.innerHTML="";
+ skins.forEach(s=>{
+  let b=document.createElement("button");
+  b.className="skinBtn";
+  let owned=ownedSkins.includes(s.name);
+  b.textContent=owned?`${s.name} (Owned)`:`${s.name} - ${s.cost}`;
+  b.onclick=()=>{
+    if(!owned && totalPoints>=s.cost){
+      totalPoints-=s.cost;
+      ownedSkins.push(s.name);
+    }
+    selectedSkin=s.name;
+    player.color=s.color;
+    save();
+    pointsDisplay.textContent=totalPoints;
+  };
+  shopContainer.appendChild(b);
+ });
 };
 
-closeShop.onclick=()=>shopOverlay.style.display="none";
+closeShopBtn.onclick=()=>shopOverlay.style.display="none";
 
-// ---------------- RESIZE ----------------
-window.addEventListener("resize",()=>{
-  canvas.width=innerWidth;
-  canvas.height=innerHeight;
-});
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+onresize=()=>{w=c.width=innerWidth;h=c.height=innerHeight;}
 </script>
 </body>
 </html>
