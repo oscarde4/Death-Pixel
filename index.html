@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -290,12 +291,7 @@ function update(){
       p.y += dy/d * p.speed;
 
       if(d < player.size/2 + p.size/2){
-        if(player.rainbow){
-          pixels.splice(i, 1);
-          score += 1; // gain 1 score per kill only during rainbow
-        } else {
-          gameOver = true;
-        }
+        gameOver = true; // No points for kills
       }
     } else {
       if(Date.now() - p.shootTimer > 1500){
@@ -319,7 +315,6 @@ function update(){
     if(a.x < 0 || a.x > w || a.y < 0 || a.y > h) arrows.splice(ai,1);
   });
 
-  // rainbow effect timer
   if(player.rainbow && Date.now() - player.rainbowTimer > 25000) player.rainbow = false;
 
   if(score >= 50 && !strongUnlocked){ strongUnlocked = true; for(let i=0;i<2;i++) spawnPixel(true); }
@@ -343,7 +338,7 @@ function startGame(){
   resetGame();
   pixelSpawner = setInterval(()=>spawnPixel(),2500);
   rainbowSpawner = setInterval(()=>{if(Math.random()<0.01) spawnRainbow();},1000);
-  scoreInterval = setInterval(()=>{if(!gameOver) score++;},1000); // automatic 1 score/sec
+  scoreInterval = setInterval(()=>{if(!gameOver) score++;},1000); // 1 score/sec automatic
   loop();
 }
 
