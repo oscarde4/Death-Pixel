@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead Pixel</title>
+<style>
+body,html{margin:0;padding:0;overflow:hidden;background:black;}
+canvas{display:block;background:black;}
+button{
+  position:absolute;
+  padding:10px 20px;
+  font-size:18px;
+  background:red;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  z-index:1;
+}
+#playBtn{top:40%;left:50%;transform:translateX(-50%)}
+#retryBtn, #shopBtn, #cheatBtn{display:none; left:50%; transform:translateX(-50%)}
+#shopBtn{background:blue;}
+#cheatBtn{background:green;}
+#shopOverlay{display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);color:white;z-index:2;overflow:auto;padding-top:50px;text-align:center;}
+.skinBtn{display:block;margin:20px auto;padding:10px 20px;font-size:20px;background:#222;color:white;border:none;border-radius:8px;cursor:pointer;width:220px;}
+#closeShopBtn{margin-top:30px;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="playBtn">Play</button>
+<button id="retryBtn">Retry</button>
+<button id="shopBtn">Shop</button>
+<button id="cheatBtn">Cheat Code</button>
+
+<div id="shopOverlay">
+  <h2>Shop</h2>
+  <div id="shopContainer"></div>
+  <p>Total Points: <span id="pointsDisplay">0</span></p>
+  <button id="closeShopBtn" class="skinBtn">Close Shop</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const playBtn = document.getElementById('playBtn');
+const retryBtn = document.getElementById('retryBtn');
+const shopBtn = document.getElementById('shopBtn');
+const cheatBtn = document.getElementById('cheatBtn');
+const shopOverlay = document.getElementById('shopOverlay');
+const shopContainer = document.getElementById('shopContainer');
+const pointsDisplay = document.getElementById('pointsDisplay');
+const closeShopBtn = document.getElementById('closeShopBtn');
+
+let w = window.innerWidth;
+let h = window.innerHeight;
+canvas.width = w;
+canvas.height = h;
+
+// ------------------ GAME STATE ------------------
+let score = 0;
+let pixels = [];
+let gameOver = false;
+let gameRunning = false;
+
+// ------------------ PLAYER ------------------
+let player = {x: w/2, y: h/2, size: 10, color: 'red', speed: 1, rainbow: false, rainbowTimer: 0};
+
+// timers / unlocks
+let strongUnlocked = false;
+let doubleTimer = 0;
+
+// ------------------ SKINS ------------------
+let skins = [
+  {name:'Red', color:'red', cost:0},
+  {name:'Blue', color:'blue', cost:50},
+  {name:'Green', color:'green', cost:50},
+  {name:'Purple', color:'purple', cost:50},
+  {name:'Yellow', color:'yellow', cost:100},
+  {name:'Cyan', color:'cyan', cost:150},
+  {name:'Magenta', color:'magenta', cost:150},
+  {name:'Orange', color:'orange', cost:200},
+  {name:'White', color:'white', cost:250},
+  {name:'Black', color:'black', cost:300}
+];
+
+let ownedSkins = ['Red'];
+let selectedSkin = 'Red';
+let totalPoints = 0;
+let rewardRedeemed = false;
+
+// ------------------ LOCAL STORAGE ------------------
+function saveProgress(){
+  localStorage.setItem('dp_points', totalPoints);
+  localStorage.setItem('dp_ownedSkins', JSON.stringify(ownedSkins));
+  localStorage.setItem('dp_selectedSkin', selectedSkin);
+  localStorage.setItem('dp_rewardRedeemed', rewardRedeemed);
+}
+function loadProgress(){
+  let pts = localStorage.getItem('dp_points');
+  if(pts) totalPoints = parseInt(pts);
+
+  let os = localStorage.getItem('dp_ownedSkins');
+  if(os) ownedSkins = JSON.parse(os);
+
+  let ss = localStorage.getItem('dp_selectedSkin');
+  if(ss) selectedSkin = ss;
+
+  let rr = localStorage.getItem('dp_rewardRedeemed');
+  if(rr) rewardRedeemed = (rr==='true');
+
+  player.color = selectedSkin;
+  pointsDisplay.innerText = totalPoints;
+}
+loadProgress();
+
+// ------------------ SPAWN ------------------
+function spawnPixel(strong=false, doubleSpeed=false) {
+  if(!gameRunning) return;
+  let x = Math.random()*w;
+  let y = Math.random()*h;
+  pixels.push({
+    x, y,
+    size: doubleSpeed ? 12 : strong ? 20 : 10,
+    speed: doubleSpeed ? 2 : 1 + score*0.05,
+    color: doubleSpeed ? 'yellow' : strong ? 'blue' : 'red',
+    strong, doubleSpeed
+  });
+}
+
+function spawnRainbow() {
+  if(!gameRunning) return;
+  pixels.push({x: Math.random()*w, y: Math.random()*h, size: 12, speed: 0, color: 'rainbow', rainbow:true});
+}
+
+// ------------------ RESET ------------------
+function resetGame() {
+  score = 0;
+  pixels = [];
+  player.x = w/2;
+  player.y = h/2;
+  player.size = 10;
+  player.color = selectedSkin;
+  player.speed = 1;
+  player.rainbow = false;
+  player.rainbowTimer = 0;
+
+  gameOver = false;
+  strongUnlocked = false;
+  doubleTimer = 0;
+
+  retryBtn.style.display = 'none';
+  shopBtn.style.display = 'none';
+  cheatBtn.style.display = 'none';
+  shopOverlay.style.display = 'none';
+
+  spawnPixel();
+  draw();
+}
+
+// ------------------ DRAW ------------------
+function draw() {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(0,0,w,h);
+
+  pixels.forEach(p=>{
+    if(p.rainbow){
+      let g = ctx.createLinearGradient(p.x-6,p.y-6,p.x+6,p.y+6);
+      ['red','orange','yellow','green','blue','purple'].forEach((c,i)=>g.addColorStop(i/5,c));
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = p.color;
+    ctx.fillRect(p.x-p.size/2, p.y-p.size/2, p.size, p.size);
+  });
+
+  ctx.fillStyle = player.color;
+  if(player.rainbow){
+    let g = ctx.createLinearGradient(player.x-player.size/2,player.y-player.size/2,player.x+player.size/2,player.y+player.size/2);
+    ['red','orange','yellow','green','blue','purple'].forEach((c,i)=>g.addColorStop(i/5,c));
+    ctx.fillStyle = g;
+  }
+  ctx.fillRect(player.x-player.size/2, player.y-player.size/2, player.size, player.size);
+
+  ctx.fillStyle='white';
+  ctx.font='20px Arial';
+  ctx.textAlign='left';
+  ctx.fillText('Score: ' + score, 10,30);
+  ctx.fillText('Points: ' + totalPoints, 10,60);
+
+  if(gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(w/2-180, h/2-80, 360,120);
+    ctx.fillStyle='white';
+    ctx.font='50px Arial';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER', w/2, h/2-20);
+    ctx.font='30px Arial';
+    ctx.fillText('Final Score: '+score, w/2, h/2+30);
+
+    retryBtn.style.display='block';
+    shopBtn.style.display='block';
+    cheatBtn.style.display='block';
+
+    retryBtn.style.top = (h/2 + 80)+'px';
+    shopBtn.style.top = (h/2 + 140)+'px';
+    cheatBtn.style.top = (h/2 + 200)+'px';
+  }
+}
+
+// ------------------ UPDATE ------------------
+function update() {
+  if(gameOver) return;
+
+  pixels.forEach((p,i)=>{
+    if(p.rainbow){
+      let dx = player.x - p.x;
+      let dy = player.y - p.y;
+      let d = Math.sqrt(dx*dx + dy*dy);
+      if(d < player.size/2 + p.size/2){
+        player.rainbow = true;
+        player.rainbowTimer = Date.now();
+        pixels.splice(i,1);
+      }
+      return;
+    }
+
+    let dx = player.x - p.x;
+    let dy = player.y - p.y;
+    let d = Math.sqrt(dx*dx + dy*dy);
+    p.x += dx/d*p.speed;
+    p.y += dy/d*p.speed;
+
+    if(d < player.size/2 + p.size/2){
+      if(player.rainbow && !p.strong && !p.doubleSpeed) pixels.splice(i,1);
+      else gameOver = true;
+      if(p.doubleSpeed){player.speed=2; doubleTimer=Date.now(); pixels.splice(i,1);}
+    }
+  });
+
+  if(player.speed===2 && Date.now()-doubleTimer>60000) player.speed=1;
+  if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
+
+  if(score>=50 && !strongUnlocked){strongUnlocked=true;for(let i=0;i<2;i++) spawnPixel(true);}
+
+  // slow red pixel spawn
+  if(Math.random()<0.002) spawnPixel();
+  // rare double-speed
+  if(Math.random()<0.001) spawnPixel(false,false,true);
+}
+
+// ------------------ LOOP ------------------
+function loop(){
+  if(!gameRunning) return;
+  update();
+  draw();
+  if(!gameOver) requestAnimationFrame(loop);
+}
+
+// ------------------ CONTROLS ------------------
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); player.x=e.touches[0].clientX; player.y=e.touches[0].clientY; },{passive:false});
+canvas.addEventListener('mousemove', e=>{ player.x=e.clientX; player.y=e.clientY; });
+
+// ------------------ START / RETRY ------------------
+let pixelSpawner, rainbowSpawner, scoreInterval;
+function startGame(){
+  gameRunning=true;
+  playBtn.style.display='none';
+  resetGame();
+  pixelSpawner=setInterval(()=>spawnPixel(),2500);
+  rainbowSpawner=setInterval(()=>{if(Math.random()<0.01) spawnRainbow();},1000);
+  scoreInterval=setInterval(()=>{if(!gameOver) score++;},1000);
+  loop();
+}
+
+playBtn.addEventListener('click', startGame);
+
+retryBtn.addEventListener('click', ()=>{
+  totalPoints += score;
+  saveProgress();
+  pointsDisplay.innerText = totalPoints;
+  resetGame();
+  startGame();
+});
+
+shopBtn.addEventListener('click', openShop);
+
+cheatBtn.addEventListener('click', ()=>{
+  if(rewardRedeemed){alert("Cheat already redeemed"); return;}
+  let code = prompt("Enter cheat code:");
+  if(code==='REWARDXD'){
+    totalPoints +=200;
+    rewardRedeemed = true;
+    saveProgress();
+    pointsDisplay.innerText = totalPoints;
+    alert("200 points added!");
+  } else alert("Invalid code");
+});
+
+// ------------------ SHOP ------------------
+function openShop(){
+  shopOverlay.style.display='block';
+  shopContainer.innerHTML='';
+  skins.forEach(s=>{
+    let btn = document.createElement('button');
+    btn.className='skinBtn';
+    let owned = ownedSkins.includes(s.name);
+    btn.innerText = `${s.name} ${owned ? '(Owned)' : '- Cost: '+s.cost+' pts'}`;
+    btn.onclick = ()=>{
+      if(!owned && totalPoints >= s.cost){
+        totalPoints -= s.cost;
+        ownedSkins.push(s.name);
+        saveProgress();
+        pointsDisplay.innerText = totalPoints;
+        btn.innerText = `${s.name} (Owned)`;
+      }
+      selectedSkin = s.name;
+      player.color = s.color;
+      saveProgress();
+    };
+    shopContainer.appendChild(btn);
+  });
+}
+
+closeShopBtn.addEventListener('click', ()=>{
+  shopOverlay.style.display='none';
+  draw(); // return to Game Over screen
+});
+
+// ------------------ RESIZE ------------------
+window.addEventListener('resize', ()=>{ w=window.innerWidth; h=window.innerHeight; canvas.width=w; canvas.height=h; });
+</script>
+</body>
+</html>
