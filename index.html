@@ -1,237 +1,254 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dead Pixel</title>
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <style>
-html,body{margin:0;padding:0;overflow:hidden;background:black;}
-canvas{display:block;}
-
-button,input{
- position:absolute;
- z-index:5;
- padding:10px 18px;
- font-size:16px;
- border-radius:8px;
- border:none;
- cursor:pointer;
+body,html{margin:0;padding:0;overflow:hidden;background:black;}
+canvas{display:block;background:black;}
+button{
+  position:absolute;
+  padding:10px 20px;
+  font-size:18px;
+  background:red;
+  color:white;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  z-index:2;
 }
-#playBtn{top:40%;left:50%;transform:translateX(-50%);background:red;color:white;}
-#retryBtn,#shopBtn,#cheatBtn{display:none;left:50%;transform:translateX(-50%)}
-#shopBtn{background:blue;color:white}
-#cheatBtn{background:green;color:white}
-
-#difficulty{
- top:10px;
- right:10px;
- width:120px;
+#playBtn{top:40%;left:50%;transform:translateX(-50%)}
+#retryBtn,#shopBtn,#cheatBtn{
+  display:none;
+  left:50%;
+  transform:translateX(-50%)
 }
-
-#joystick{
- position:absolute;
- bottom:30px;
- left:30px;
- width:120px;
- height:120px;
- border-radius:50%;
- background:rgba(255,255,255,.1);
- touch-action:none;
+#shopBtn{background:blue;}
+#cheatBtn{background:green;}
+#shopOverlay{
+  display:none;
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  color:white;
+  z-index:3;
+  overflow-y:auto;
+  text-align:center;
 }
-#stick{
- width:50px;height:50px;
- border-radius:50%;
- background:white;
- position:absolute;
- left:35px;top:35px;
+.skinBtn{
+  display:block;
+  margin:15px auto;
+  padding:12px;
+  width:220px;
+  background:#222;
+  color:white;
+  border:none;
+  border-radius:8px;
+  font-size:18px;
 }
-
 </style>
 </head>
 <body>
 
 <canvas id="c"></canvas>
-
 <button id="playBtn">Play</button>
 <button id="retryBtn">Retry</button>
 <button id="shopBtn">Shop</button>
 <button id="cheatBtn">Cheat</button>
 
-<input type="range" min="1" max="3" step="0.1" value="1" id="difficulty">
-
-<div id="joystick">
-  <div id="stick"></div>
+<div id="shopOverlay">
+  <h2>Shop</h2>
+  <div id="shopContainer"></div>
+  <p>Points: <span id="pointsDisplay">0</span></p>
+  <button id="closeShop" class="skinBtn">Close</button>
 </div>
 
 <script>
-/* ---------- CANVAS ---------- */
-const c=document.getElementById("c"),ctx=c.getContext("2d");
-let w=c.width=innerWidth,h=c.height=innerHeight;
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const playBtn = document.getElementById("playBtn");
+const retryBtn = document.getElementById("retryBtn");
+const shopBtn = document.getElementById("shopBtn");
+const cheatBtn = document.getElementById("cheatBtn");
+const shopOverlay = document.getElementById("shopOverlay");
+const shopContainer = document.getElementById("shopContainer");
+const pointsDisplay = document.getElementById("pointsDisplay");
+const closeShop = document.getElementById("closeShop");
 
-/* ---------- UI ---------- */
-const playBtn=playBtnEl=document.getElementById("playBtn");
-const retryBtn=document.getElementById("retryBtn");
-const shopBtn=document.getElementById("shopBtn");
-const cheatBtn=document.getElementById("cheatBtn");
-const difficulty=document.getElementById("difficulty");
+canvas.width = innerWidth;
+canvas.height = innerHeight;
 
-/* ---------- PLAYER ---------- */
-const player={
- x:w/2,y:h/2,size:12,
- speed:1,color:"red",
- rainbow:false,
- isBurger:false
-};
+let gameRunning=false, gameOver=false;
+let score=0, totalPoints=0;
+let pixels=[];
+let usedCheatCodes = JSON.parse(localStorage.getItem("usedCheatCodes")||"[]");
 
-/* ---------- BURGER IMAGE ---------- */
-const burgerImg=new Image();
-burgerImg.src="burger.png";
+let player={x:innerWidth/2,y:innerHeight/2,size:10,color:"red",rainbow:false,rainbowTimer:0};
+let isBurger=false;
 
-/* ---------- GAME ---------- */
-let pixels=[],score=0,gameOver=false,gameRunning=false;
-let usedCodes=JSON.parse(localStorage.getItem("dp_codes")||"[]");
+// burger image
+const burgerImg = new Image();
+burgerImg.src = "burger.png";
 
-/* ---------- SOUND ---------- */
-const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-function beep(freq=400){
- const o=audioCtx.createOscillator();
- const g=audioCtx.createGain();
- o.connect(g);g.connect(audioCtx.destination);
- o.frequency.value=freq;
- o.start();g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.3);
+// skins
+let skins=[
+  {name:"Red",color:"red",cost:0},
+  {name:"Blue",color:"blue",cost:50},
+  {name:"Green",color:"green",cost:50},
+  {name:"Purple",color:"purple",cost:100},
+  {name:"Cyan",color:"cyan",cost:150},
+  {name:"Yellow",color:"yellow",cost:200},
+  {name:"White",color:"white",cost:300},
+  {name:"Black",color:"black",cost:500}
+];
+let ownedSkins=JSON.parse(localStorage.getItem("ownedSkins")||'["Red"]');
+let selectedSkin=localStorage.getItem("selectedSkin")||"Red";
+
+function save(){
+  localStorage.setItem("points",totalPoints);
+  localStorage.setItem("ownedSkins",JSON.stringify(ownedSkins));
+  localStorage.setItem("selectedSkin",selectedSkin);
+  localStorage.setItem("usedCheatCodes",JSON.stringify(usedCheatCodes));
 }
 
-/* ---------- SPAWN ---------- */
-function spawn(type="red"){
- let p={x:Math.random()*w,y:Math.random()*h,type};
- if(type==="red"){p.size=10;p.speed=1;p.color="red";}
- if(type==="blue"){p.size=14;p.speed=1.2;p.color="blue";}
- if(type==="white"){p.size=18;p.speed=0.7;p.color="white";}
- if(type==="rainbow"){p.size=12;p.speed=0;p.color="rainbow";}
- pixels.push(p);
+totalPoints=parseInt(localStorage.getItem("points")||0);
+pointsDisplay.textContent=totalPoints;
+
+// spawn
+function spawnPixel(type="red"){
+  pixels.push({
+    x:Math.random()*canvas.width,
+    y:Math.random()*canvas.height,
+    size:type==="blue"?18:type==="white"?26:10,
+    speed:type==="blue"?1.2:type==="white"?0:1,
+    type,
+    shootTimer:Date.now()
+  });
 }
 
-/* ---------- UPDATE ---------- */
-function update(){
- let diff=+difficulty.value;
- pixels.forEach((p,i)=>{
-  if(p.type==="rainbow"){
-    if(dist(p,player)<15){
-      player.rainbow=true;
-      beep(800);
-      pixels.splice(i,1);
-    }
-    return;
-  }
-
-  let dx=player.x-p.x,dy=player.y-p.y;
-  let d=Math.hypot(dx,dy);
-  p.x+=dx/d*p.speed*diff;
-  p.y+=dy/d*p.speed*diff;
-
-  if(d<player.size+p.size){
-    if(player.rainbow){
-      beep(600);
-      score+= p.type==="red"?1:p.type==="blue"?5:10;
-      pixels.splice(i,1);
-    }else{
-      gameOver=true;
-      beep(200);
-    }
-  }
- });
-}
-
-/* ---------- DRAW ---------- */
+// draw
 function draw(){
- ctx.fillStyle="rgba(0,0,0,.3)";
- ctx.fillRect(0,0,w,h);
+  ctx.fillStyle="rgba(0,0,0,0.25)";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
- pixels.forEach(p=>{
-  ctx.fillStyle=p.color;
-  ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
- });
+  pixels.forEach(p=>{
+    ctx.fillStyle=p.type;
+    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+  });
 
- if(player.isBurger){
-  ctx.drawImage(burgerImg,player.x-20,player.y-20,40,40);
- }else{
-  ctx.fillStyle=player.color;
-  ctx.fillRect(player.x-6,player.y-6,12,12);
- }
+  if(isBurger){
+    ctx.drawImage(burgerImg,player.x-20,player.y-20,40,40);
+  }else{
+    ctx.fillStyle=selectedSkin.toLowerCase();
+    ctx.fillRect(player.x-5,player.y-5,10,10);
+  }
 
- ctx.fillStyle="white";
- ctx.fillText("Score: "+score,10,20);
+  ctx.fillStyle="white";
+  ctx.font="20px Arial";
+  ctx.fillText("Score: "+score,10,30);
 
- if(gameOver){
-  retryBtn.style.display=shopBtn.style.display=cheatBtn.style.display="block";
-  retryBtn.style.top=h/2+40+"px";
-  shopBtn.style.top=h/2+90+"px";
-  cheatBtn.style.top=h/2+140+"px";
- }
+  if(gameOver){
+    ctx.fillText("GAME OVER",canvas.width/2-70,canvas.height/2-40);
+    retryBtn.style.display="block";
+    shopBtn.style.display="block";
+    cheatBtn.style.display="block";
+    retryBtn.style.top="55%";
+    shopBtn.style.top="63%";
+    cheatBtn.style.top="71%";
+  }
 }
 
-/* ---------- LOOP ---------- */
+// update
+function update(){
+  if(gameOver) return;
+
+  pixels.forEach((p,i)=>{
+    let dx=player.x-p.x, dy=player.y-p.y;
+    let d=Math.hypot(dx,dy);
+    if(p.type!=="white"){
+      p.x+=dx/d*p.speed;
+      p.y+=dy/d*p.speed;
+    }
+    if(d<p.size){
+      gameOver=true;
+    }
+  });
+
+  if(Math.random()<0.02) spawnPixel("red");
+  if(score>=50 && Math.random()<0.005) spawnPixel("blue");
+  if(score>=100 && Math.random()<0.002) spawnPixel("white");
+}
+
+// loop
 function loop(){
- if(!gameRunning)return;
- update();draw();
- if(!gameOver)requestAnimationFrame(loop);
+  if(!gameRunning) return;
+  update();
+  draw();
+  if(!gameOver) requestAnimationFrame(loop);
 }
 
-/* ---------- CONTROLS ---------- */
-c.onmousemove=e=>{player.x=e.clientX;player.y=e.clientY;}
+// controls
+canvas.addEventListener("mousemove",e=>{player.x=e.clientX;player.y=e.clientY});
+canvas.addEventListener("touchmove",e=>{
+  e.preventDefault();
+  player.x=e.touches[0].clientX;
+  player.y=e.touches[0].clientY;
+},{passive:false});
 
-/* ---------- JOYSTICK ---------- */
-const joy=document.getElementById("joystick");
-const stick=document.getElementById("stick");
-let joyActive=false;
-
-joy.addEventListener("touchstart",()=>joyActive=true);
-joy.addEventListener("touchend",()=>{joyActive=false;stick.style.left="35px";stick.style.top="35px";});
-joy.addEventListener("touchmove",e=>{
- if(!joyActive)return;
- let r=joy.getBoundingClientRect();
- let x=e.touches[0].clientX-r.left-60;
- let y=e.touches[0].clientY-r.top-60;
- let d=Math.min(40,Math.hypot(x,y));
- let a=Math.atan2(y,x);
- let dx=Math.cos(a)*d,dy=Math.sin(a)*d;
- stick.style.left=35+dx+"px";
- stick.style.top=35+dy+"px";
- player.x+=dx*0.3;
- player.y+=dy*0.3;
-});
-
-/* ---------- BUTTONS ---------- */
+// buttons
 playBtn.onclick=()=>{
- gameRunning=true;
- playBtn.style.display="none";
- spawn("red");
- setInterval(()=>spawn("red"),3000);
- setInterval(()=>score>=50&&spawn("blue"),5000);
- setInterval(()=>score>=100&&spawn("white"),8000);
- setInterval(()=>Math.random()<.02&&spawn("rainbow"),1000);
- setInterval(()=>!gameOver&&score++,1000);
- loop();
+  gameRunning=true;
+  playBtn.style.display="none";
+  score=0; pixels=[];
+  gameOver=false;
+  loop();
+  setInterval(()=>{if(!gameOver)score++},1000);
 };
 
-retryBtn.onclick=()=>location.reload();
+retryBtn.onclick=()=>{
+  totalPoints+=score;
+  save();
+  location.reload();
+};
 
 cheatBtn.onclick=()=>{
- let code=prompt("Enter code:");
- if(!code)return;
- code=code.toUpperCase();
- if(usedCodes.includes(code))return alert("Code already used");
-
- if(code==="HUNGRY"){
-  player.isBurger=true;
-  usedCodes.push(code);
-  localStorage.setItem("dp_codes",JSON.stringify(usedCodes));
-  alert("🍔 You are now a hamburger!");
- }else alert("Invalid code");
+  let code=prompt("Enter code");
+  if(!code) return;
+  code=code.toUpperCase();
+  if(usedCheatCodes.includes(code)) return alert("Already used");
+  if(code==="REWARDXD"){
+    totalPoints+=200;
+  }else if(code==="HUNGRY"){
+    isBurger=true;
+  }else return alert("Invalid code");
+  usedCheatCodes.push(code);
+  save();
+  alert("Code activated!");
 };
 
-function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
-onresize=()=>{w=c.width=innerWidth;h=c.height=innerHeight;}
+shopBtn.onclick=()=>{
+  shopOverlay.style.display="block";
+  shopContainer.innerHTML="";
+  skins.forEach(s=>{
+    let b=document.createElement("button");
+    b.className="skinBtn";
+    b.textContent=s.name+" ("+s.cost+")";
+    b.onclick=()=>{
+      if(!ownedSkins.includes(s.name)){
+        if(totalPoints<s.cost) return;
+        totalPoints-=s.cost;
+        ownedSkins.push(s.name);
+      }
+      selectedSkin=s.name;
+      save();
+    };
+    shopContainer.appendChild(b);
+  });
+};
+
+closeShop.onclick=()=>shopOverlay.style.display="none";
+
 </script>
 </body>
 </html>
