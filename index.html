@@ -119,7 +119,7 @@ let pixels = [];
 let arrows = [];
 let gameOver = false;
 let gameRunning = false;
-let bestScore = 0; // NEW: Best Score
+let bestScore = 0;
 
 // ------------------ PLAYER ------------------
 let player = {x: w/2, y: h/2, size: 10, color: 'red', speed: 1, rainbow: false, rainbowTimer: 0};
@@ -154,7 +154,7 @@ function saveProgress(){
     localStorage.setItem('dp_ownedSkins', JSON.stringify(ownedSkins));
     localStorage.setItem('dp_selectedSkin', selectedSkin);
     localStorage.setItem('dp_rewardRedeemed', rewardRedeemed);
-    localStorage.setItem('dp_bestScore', bestScore); // NEW: Save best score
+    localStorage.setItem('dp_bestScore', bestScore);
   } catch(e){ console.warn("LocalStorage not available"); }
 }
 
@@ -172,7 +172,7 @@ function loadProgress(){
     let rr = localStorage.getItem('dp_rewardRedeemed');
     if(rr) rewardRedeemed = (rr==='true');
 
-    let bs = localStorage.getItem('dp_bestScore'); // NEW: Load best score
+    let bs = localStorage.getItem('dp_bestScore');
     if(bs) bestScore = parseInt(bs);
   } catch(e){ console.warn("LocalStorage not available"); }
 
@@ -241,10 +241,10 @@ function draw(){
   ctx.textAlign='left';
   ctx.fillText('Score: '+score,10,30);
   ctx.fillText('Points: '+totalPoints,10,60);
-  ctx.fillText('Best Score: '+bestScore,10,90); // NEW: display best score
+  ctx.fillText('Best Score: '+bestScore,10,90);
 
   if(gameOver){
-    if(score > bestScore){ bestScore = score; saveProgress(); } // NEW: update best score
+    if(score > bestScore){ bestScore = score; saveProgress(); }
 
     ctx.fillStyle='rgba(0,0,0,0.6)';
     ctx.fillRect(w/2-180,h/2-80,360,120);
@@ -271,92 +271,102 @@ function update(){
   // update pixels
   pixels.forEach((p,i)=>{
     if(p.rainbow){
-      let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
-      if(d<player.size/2+p.size/2){
-        player.rainbow=true; player.rainbowTimer=Date.now();
+      let dx = player.x - p.x;
+      let dy = player.y - p.y;
+      let d = Math.sqrt(dx*dx + dy*dy);
+      if(d < player.size/2 + p.size/2){
+        player.rainbow = true;
+        player.rainbowTimer = Date.now();
         pixels.splice(i,1);
       }
       return;
     }
 
     if(!p.whiteShooter){
-      let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
-      p.x+=dx/d*p.speed; p.y+=dy/d*p.speed;
+      let dx = player.x - p.x;
+      let dy = player.y - p.y;
+      let d = Math.sqrt(dx*dx + dy*dy);
+      p.x += dx/d * p.speed;
+      p.y += dy/d * p.speed;
 
-      if(d<player.size/2+p.size/2){
-        if(player.rainbow && !p.doubleSpeed) {
-          pixels.splice(i,1);
-          if(p.color==='red') score+=1;
-          if(p.color==='blue') score+=5;
-          if(p.color==='white') score+=10;
-        } else if(!p.whiteShooter){
-          gameOver=true;
+      if(d < player.size/2 + p.size/2){
+        if(player.rainbow){
+          pixels.splice(i, 1);
+          score += 1; // gain 1 score per kill only during rainbow
+        } else {
+          gameOver = true;
         }
       }
     } else {
-      if(Date.now()-p.shootTimer>1500){
-        let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
-        arrows.push({x:p.x,y:p.y,vx:dx/d*5,vy:dy/d*5,size:6});
-        p.shootTimer=Date.now();
+      if(Date.now() - p.shootTimer > 1500){
+        let dx = player.x - p.x;
+        let dy = player.y - p.y;
+        let d = Math.sqrt(dx*dx + dy*dy);
+        arrows.push({x: p.x, y: p.y, vx: dx/d*5, vy: dy/d*5, size:6});
+        p.shootTimer = Date.now();
       }
     }
   });
 
   // update arrows
   arrows.forEach((a,ai)=>{
-    a.x+=a.vx; a.y+=a.vy;
-    let dx=player.x-a.x; let dy=player.y-a.y; let d=Math.sqrt(dx*dx+dy*dy);
-    if(d<player.size/2) gameOver=true;
-    if(a.x<0||a.x>w||a.y<0||a.y>h) arrows.splice(ai,1);
+    a.x += a.vx;
+    a.y += a.vy;
+    let dx = player.x - a.x;
+    let dy = player.y - a.y;
+    let d = Math.sqrt(dx*dx + dy*dy);
+    if(d < player.size/2) gameOver = true;
+    if(a.x < 0 || a.x > w || a.y < 0 || a.y > h) arrows.splice(ai,1);
   });
 
-  if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
+  // rainbow effect timer
+  if(player.rainbow && Date.now() - player.rainbowTimer > 25000) player.rainbow = false;
 
-  if(score>=50 && !strongUnlocked){strongUnlocked=true; for(let i=0;i<2;i++) spawnPixel(true);}
-  if(score>=100 && Math.random()<0.002) spawnPixel(false,false,true);
+  if(score >= 50 && !strongUnlocked){ strongUnlocked = true; for(let i=0;i<2;i++) spawnPixel(true); }
+  if(score >= 100 && Math.random() < 0.002) spawnPixel(false,false,true);
 
-  if(Math.random()<0.002) spawnPixel();
+  if(Math.random() < 0.002) spawnPixel();
 }
 
 // ------------------ LOOP ------------------
-function loop(){if(!gameRunning) return; update(); draw(); if(!gameOver) requestAnimationFrame(loop);}
+function loop(){ if(!gameRunning) return; update(); draw(); if(!gameOver) requestAnimationFrame(loop); }
 
 // ------------------ CONTROLS ------------------
-canvas.addEventListener('touchmove',e=>{e.preventDefault(); player.x=e.touches[0].clientX; player.y=e.touches[0].clientY;},{passive:false});
-canvas.addEventListener('mousemove',e=>{player.x=e.clientX; player.y=e.clientY;});
+canvas.addEventListener('touchmove', e=>{ e.preventDefault(); player.x = e.touches[0].clientX; player.y = e.touches[0].clientY; }, {passive:false});
+canvas.addEventListener('mousemove', e=>{ player.x = e.clientX; player.y = e.clientY; });
 
 // ------------------ START / RETRY ------------------
 let pixelSpawner, rainbowSpawner, scoreInterval;
 function startGame(){
-  gameRunning=true;
-  playBtn.style.display='none';
+  gameRunning = true;
+  playBtn.style.display = 'none';
   resetGame();
-  pixelSpawner=setInterval(()=>spawnPixel(),2500);
-  rainbowSpawner=setInterval(()=>{if(Math.random()<0.01) spawnRainbow();},1000);
-  scoreInterval=setInterval(()=>{if(!gameOver) score++;},1000);
+  pixelSpawner = setInterval(()=>spawnPixel(),2500);
+  rainbowSpawner = setInterval(()=>{if(Math.random()<0.01) spawnRainbow();},1000);
+  scoreInterval = setInterval(()=>{if(!gameOver) score++;},1000); // automatic 1 score/sec
   loop();
 }
 
-playBtn.addEventListener('click',startGame);
-retryBtn.addEventListener('click',()=>{
-  totalPoints+=score;
+playBtn.addEventListener('click', startGame);
+retryBtn.addEventListener('click', ()=>{
+  totalPoints += score;
   saveProgress();
-  pointsDisplay.innerText=totalPoints;
+  pointsDisplay.innerText = totalPoints;
   resetGame();
   startGame();
 });
 
 // ------------------ CHEAT ------------------
-cheatBtn.addEventListener('click',()=>{
+cheatBtn.addEventListener('click', ()=>{
   if(rewardRedeemed){alert("Cheat already redeemed"); return;}
-  let code=prompt("Enter cheat code:");
+  let code = prompt("Enter cheat code:");
   if(code==='REWARDXD'){totalPoints+=200; rewardRedeemed=true; saveProgress(); pointsDisplay.innerText=totalPoints; alert("200 points added!");}
   else alert("Invalid code");
 });
 
 // ------------------ SHOP ------------------
-shopBtn.addEventListener('click',openShop);
-closeShopBtn.addEventListener('click',()=>{shopOverlay.style.display='none'; draw();});
+shopBtn.addEventListener('click', openShop);
+closeShopBtn.addEventListener('click', ()=>{ shopOverlay.style.display='none'; draw(); });
 
 function openShop(){
   shopOverlay.style.display='block';
@@ -380,7 +390,7 @@ function openShop(){
 }
 
 // ------------------ RESIZE ------------------
-window.addEventListener('resize',()=>{ w=window.innerWidth; h=window.innerHeight; canvas.width=w; canvas.height=h; });
+window.addEventListener('resize', ()=>{ w=window.innerWidth; h=window.innerHeight; canvas.width=w; canvas.height=h; });
 </script>
 </body>
 </html>
