@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Dead Pixel</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dead Pixel</title>
 <style>
-html,body{margin:0;padding:0;overflow:hidden;background:black;}
-canvas{display:block;}
+body,html{margin:0;padding:0;overflow:hidden;background:black;}
+canvas{display:block;background:black;}
 button{
   position:absolute;
   padding:10px 20px;
@@ -16,278 +16,363 @@ button{
   border:none;
   border-radius:8px;
   cursor:pointer;
-  z-index:3;
+  z-index:10;
 }
 #playBtn{top:40%;left:50%;transform:translateX(-50%)}
-#retryBtn,#shopBtn,#cheatBtn{
-  display:none;
-  left:50%;
-  transform:translateX(-50%);
-}
+#retryBtn, #shopBtn, #cheatBtn{display:none; left:50%; transform:translateX(-50%)}
 #shopBtn{background:blue;}
 #cheatBtn{background:green;}
-
 #shopOverlay{
   display:none;
   position:absolute;
-  inset:0;
-  background:rgba(0,0,0,.85);
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.9);
   color:white;
-  z-index:5;
-  overflow-y:auto;
-  padding:20px;
+  z-index:20;
+  padding-top:50px;
+  text-align:center;
 }
-.skinBtn{
-  width:220px;
-  padding:12px;
-  margin:12px auto;
-  display:block;
-  font-size:18px;
+#shopContainer{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:15px;
+  max-height:70vh;
+  overflow-y:auto;
+  padding:10px;
+}
+.skinCard{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:space-between;
   background:#222;
   color:white;
+  width:140px;
+  height:160px;
   border-radius:10px;
+  padding:10px;
+  box-sizing:border-box;
+}
+.skinPreview{
+  width:50px;
+  height:50px;
+  border:2px solid #fff;
+  border-radius:5px;
+  margin-bottom:10px;
+}
+.skinName{
+  font-size:16px;
+  margin-bottom:5px;
+}
+.skinCost{
+  font-size:14px;
+  margin-bottom:10px;
+}
+.buyBtn{
+  padding:5px 10px;
+  font-size:14px;
   border:none;
+  border-radius:5px;
   cursor:pointer;
 }
+#closeShopBtn{margin-top:15px;width:200px;}
 </style>
 </head>
 <body>
-
 <canvas id="c"></canvas>
-
 <button id="playBtn">Play</button>
 <button id="retryBtn">Retry</button>
 <button id="shopBtn">Shop</button>
 <button id="cheatBtn">Cheat Code</button>
 
 <div id="shopOverlay">
-  <h2 style="text-align:center;">Shop</h2>
-  <p style="text-align:center;">Points: <span id="pointsDisplay">0</span></p>
+  <h2>Shop</h2>
   <div id="shopContainer"></div>
+  <p>Total Points: <span id="pointsDisplay">0</span></p>
   <button id="closeShopBtn" class="skinBtn">Close Shop</button>
 </div>
 
 <script>
-/* ---------- CANVAS ---------- */
-const c = document.getElementById("c");
-const ctx = c.getContext("2d");
-let w = c.width = innerWidth;
-let h = c.height = innerHeight;
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const playBtn = document.getElementById('playBtn');
+const retryBtn = document.getElementById('retryBtn');
+const shopBtn = document.getElementById('shopBtn');
+const cheatBtn = document.getElementById('cheatBtn');
+const shopOverlay = document.getElementById('shopOverlay');
+const shopContainer = document.getElementById('shopContainer');
+const pointsDisplay = document.getElementById('pointsDisplay');
+const closeShopBtn = document.getElementById('closeShopBtn');
 
-/* ---------- UI ---------- */
-const playBtn = document.getElementById("playBtn");
-const retryBtn = document.getElementById("retryBtn");
-const shopBtn = document.getElementById("shopBtn");
-const cheatBtn = document.getElementById("cheatBtn");
-const shopOverlay = document.getElementById("shopOverlay");
-const shopContainer = document.getElementById("shopContainer");
-const closeShopBtn = document.getElementById("closeShopBtn");
-const pointsDisplay = document.getElementById("pointsDisplay");
+let w = window.innerWidth;
+let h = window.innerHeight;
+canvas.width = w;
+canvas.height = h;
 
-/* ---------- GAME STATE ---------- */
-let gameRunning=false, gameOver=false;
-let score=0, totalPoints=0;
-let pixels=[];
+// ------------------ GAME STATE ------------------
+let score = 0;
+let pixels = [];
+let arrows = [];
+let gameOver = false;
+let gameRunning = false;
 
-/* ---------- PLAYER ---------- */
-const player={
-  x:w/2,y:h/2,size:10,color:"red",speed:1,
-  rainbow:false,rainbowTimer:0
-};
+// ------------------ PLAYER ------------------
+let player = {x: w/2, y: h/2, size: 10, color: 'red', speed: 1, rainbow: false, rainbowTimer: 0};
 
-/* ---------- SKINS ---------- */
-const skins=[
- {name:"Red",color:"red",cost:0},
- {name:"Blue",color:"blue",cost:50},
- {name:"Green",color:"green",cost:75},
- {name:"Purple",color:"purple",cost:100},
- {name:"Cyan",color:"cyan",cost:150},
- {name:"Yellow",color:"yellow",cost:200},
- {name:"White",color:"white",cost:300},
- {name:"Black",color:"black",cost:500}
+// timers / unlocks
+let strongUnlocked = false;
+let doubleTimer = 0;
+
+// ------------------ SKINS ------------------
+let skins = [
+  {name:'Red', color:'red', cost:0},
+  {name:'Blue', color:'blue', cost:50},
+  {name:'Green', color:'green', cost:50},
+  {name:'Yellow', color:'yellow', cost:50},
+  {name:'Purple', color:'purple', cost:50},
+  {name:'Cyan', color:'cyan', cost:50},
+  {name:'Magenta', color:'magenta', cost:100},
+  {name:'Orange', color:'orange', cost:150},
+  {name:'White', color:'white', cost:200},
+  {name:'Black', color:'black', cost:250}
 ];
-let ownedSkins=["Red"];
-let selectedSkin="Red";
 
-/* ---------- CHEAT CODES (LIMITED PER CODE) ---------- */
-const cheatCodes={
-  "REWARDXD":200,
-  "BONUS50":50,
-  "PIXEL100":100
-};
-let usedCheatCodes=[];
+let ownedSkins = ['Red'];
+let selectedSkin = 'Red';
+let totalPoints = 0;
+let rewardRedeemed = false;
 
-/* ---------- SAVE / LOAD ---------- */
-function save(){
- localStorage.setItem("dp_points",totalPoints);
- localStorage.setItem("dp_owned",JSON.stringify(ownedSkins));
- localStorage.setItem("dp_skin",selectedSkin);
- localStorage.setItem("dp_usedCodes",JSON.stringify(usedCheatCodes));
+// ------------------ LOCAL STORAGE ------------------
+function saveProgress(){
+  try{
+    localStorage.setItem('dp_points', totalPoints);
+    localStorage.setItem('dp_ownedSkins', JSON.stringify(ownedSkins));
+    localStorage.setItem('dp_selectedSkin', selectedSkin);
+    localStorage.setItem('dp_rewardRedeemed', rewardRedeemed);
+  } catch(e){ console.warn("LocalStorage not available"); }
 }
-function load(){
- totalPoints=+localStorage.getItem("dp_points")||0;
- ownedSkins=JSON.parse(localStorage.getItem("dp_owned"))||["Red"];
- selectedSkin=localStorage.getItem("dp_skin")||"Red";
- usedCheatCodes=JSON.parse(localStorage.getItem("dp_usedCodes"))||[];
- player.color=selectedSkin;
- pointsDisplay.textContent=totalPoints;
-}
-load();
+function loadProgress(){
+  try{
+    let pts = localStorage.getItem('dp_points');
+    if(pts) totalPoints = parseInt(pts);
 
-/* ---------- PIXELS ---------- */
-function spawnRed(){
- pixels.push({x:Math.random()*w,y:Math.random()*h,size:10,speed:1,color:"red",type:"red"});
-}
-function spawnBlue(){
- pixels.push({x:Math.random()*w,y:Math.random()*h,size:14,speed:1.3,color:"blue",type:"blue"});
-}
-function spawnWhite(){
- pixels.push({x:Math.random()*w,y:Math.random()*h,size:18,speed:0.8,color:"white",type:"white"});
-}
-function spawnRainbow(){
- pixels.push({x:Math.random()*w,y:Math.random()*h,size:14,speed:0,type:"rainbow"});
-}
+    let os = localStorage.getItem('dp_ownedSkins');
+    if(os) ownedSkins = JSON.parse(os);
 
-/* ---------- RESET ---------- */
-function reset(){
- pixels=[];
- score=0;
- gameOver=false;
- player.x=w/2;player.y=h/2;
- player.rainbow=false;
- retryBtn.style.display="none";
- shopBtn.style.display="none";
- cheatBtn.style.display="none";
- spawnRed();
+    let ss = localStorage.getItem('dp_selectedSkin');
+    if(ss) selectedSkin = ss;
+
+    let rr = localStorage.getItem('dp_rewardRedeemed');
+    if(rr) rewardRedeemed = (rr==='true');
+  } catch(e){ console.warn("LocalStorage not available"); }
+
+  player.color = selectedSkin;
+  pointsDisplay.innerText = totalPoints;
+}
+loadProgress();
+
+// ------------------ SPAWN ------------------
+function spawnPixel(strong=false,doubleSpeed=false,whiteShooter=false){
+  if(!gameRunning) return;
+  let x=Math.random()*w;
+  let y=Math.random()*h;
+  pixels.push({
+    x,y,
+    size: whiteShooter?30:doubleSpeed?12:strong?20:10,
+    speed: whiteShooter?0:doubleSpeed?2:1+score*0.05,
+    color: whiteShooter?'white':doubleSpeed?'yellow':strong?'blue':'red',
+    strong,doubleSpeed,whiteShooter,shootTimer:Date.now()
+  });
 }
 
-/* ---------- UPDATE ---------- */
-function update(){
- pixels.forEach((p,i)=>{
-  if(p.type==="rainbow"){
-    if(dist(p,player)<15){
-      player.rainbow=true;
-      player.rainbowTimer=Date.now();
-      pixels.splice(i,1);
-    }
-    return;
-  }
-  let dx=player.x-p.x, dy=player.y-p.y;
-  let d=Math.hypot(dx,dy);
-  p.x+=dx/d*p.speed;
-  p.y+=dy/d*p.speed;
+function spawnRainbow(){if(!gameRunning) return; pixels.push({x: Math.random()*w,y:Math.random()*h,size:12,speed:0,color:'rainbow',rainbow:true});}
 
-  if(d<player.size+p.size){
-    if(player.rainbow){
-      if(p.type==="red") score+=1;
-      if(p.type==="blue") score+=5;
-      if(p.type==="white") score+=10;
-      pixels.splice(i,1);
-    } else gameOver=true;
-  }
- });
- if(player.rainbow && Date.now()-player.rainbowTimer>25000)
-   player.rainbow=false;
+// ------------------ RESET ------------------
+function resetGame(){
+  score=0; pixels=[]; arrows=[];
+  player.x=w/2; player.y=h/2; player.size=10;
+  player.color=selectedSkin; player.speed=1; player.rainbow=false; player.rainbowTimer=0;
+  gameOver=false; strongUnlocked=false; doubleTimer=0;
+
+  retryBtn.style.display='none';
+  shopBtn.style.display='none';
+  cheatBtn.style.display='none';
+  shopOverlay.style.display='none';
+
+  spawnPixel();
+  draw();
 }
 
-/* ---------- DRAW ---------- */
+// ------------------ DRAW ------------------
 function draw(){
- ctx.fillStyle="rgba(0,0,0,.3)";
- ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='rgba(0,0,0,0.2)';
+  ctx.fillRect(0,0,w,h);
 
- pixels.forEach(p=>{
-  if(p.type==="rainbow"){
-    let g=ctx.createLinearGradient(p.x-6,p.y-6,p.x+6,p.y+6);
-    ["red","yellow","green","cyan","blue","purple"].forEach((c,i)=>g.addColorStop(i/5,c));
+  pixels.forEach(p=>{
+    ctx.fillStyle=p.rainbow?(()=>{let g=ctx.createLinearGradient(p.x-6,p.y-6,p.x+6,p.y+6);['red','orange','yellow','green','blue','purple'].forEach((c,i)=>g.addColorStop(i/5,c)); return g;})():p.color;
+    ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+  });
+
+  arrows.forEach(a=>{
+    ctx.fillStyle='white';
+    ctx.fillRect(a.x-a.size/2,a.y-a.size/2,a.size,a.size);
+  });
+
+  ctx.fillStyle=player.color;
+  if(player.rainbow){
+    let g=ctx.createLinearGradient(player.x-player.size/2,player.y-player.size/2,player.x+player.size/2,player.y+player.size/2);
+    ['red','orange','yellow','green','blue','purple'].forEach((c,i)=>g.addColorStop(i/5,c));
     ctx.fillStyle=g;
-  } else ctx.fillStyle=p.color;
-  ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
- });
+  }
+  ctx.fillRect(player.x-player.size/2,player.y-player.size/2,player.size,player.size);
 
- ctx.fillStyle=player.color;
- ctx.fillRect(player.x-5,player.y-5,10,10);
+  ctx.fillStyle='white';
+  ctx.font='20px Arial';
+  ctx.textAlign='left';
+  ctx.fillText('Score: '+score,10,30);
+  ctx.fillText('Points: '+totalPoints,10,60);
 
- ctx.fillStyle="white";
- ctx.fillText("Score: "+score,10,20);
- ctx.fillText("Points: "+totalPoints,10,40);
+  if(gameOver){
+    ctx.fillStyle='rgba(0,0,0,0.6)';
+    ctx.fillRect(w/2-180,h/2-80,360,120);
+    ctx.fillStyle='white';
+    ctx.font='50px Arial';
+    ctx.textAlign='center';
+    ctx.fillText('GAME OVER',w/2,h/2-20);
+    ctx.font='30px Arial';
+    ctx.fillText('Final Score: '+score,w/2,h/2+30);
 
- if(gameOver){
-  retryBtn.style.display=shopBtn.style.display=cheatBtn.style.display="block";
-  retryBtn.style.top=h/2+40+"px";
-  shopBtn.style.top=h/2+100+"px";
-  cheatBtn.style.top=h/2+160+"px";
- }
+    retryBtn.style.display='block';
+    shopBtn.style.display='block';
+    cheatBtn.style.display='block';
+    retryBtn.style.top=(h/2+100)+'px';
+    shopBtn.style.top=(h/2+180)+'px';
+    cheatBtn.style.top=(h/2+260)+'px';
+  }
 }
 
-/* ---------- LOOP ---------- */
-function loop(){
- if(!gameRunning)return;
- update();draw();
- if(!gameOver)requestAnimationFrame(loop);
-}
+// ------------------ UPDATE ------------------
+function update(){
+  if(gameOver) return;
 
-/* ---------- CONTROLS ---------- */
-c.onmousemove=e=>{player.x=e.clientX;player.y=e.clientY;}
-c.ontouchmove=e=>{player.x=e.touches[0].clientX;player.y=e.touches[0].clientY;e.preventDefault();}
-
-/* ---------- BUTTONS ---------- */
-playBtn.onclick=()=>{
- gameRunning=true;
- playBtn.style.display="none";
- reset();
- setInterval(()=>spawnRed(),3000);
- setInterval(()=>{if(score>=50)spawnBlue()},5000);
- setInterval(()=>{if(score>=100)spawnWhite()},8000);
- setInterval(()=>{if(Math.random()<.02)spawnRainbow()},1000);
- setInterval(()=>{if(!gameOver)score++},1000);
- loop();
-};
-
-retryBtn.onclick=()=>{
- totalPoints+=score;
- save();
- reset();
-};
-
-cheatBtn.onclick=()=>{
- let code=prompt("Enter code:");
- if(!code)return;
- code=code.toUpperCase();
- if(!cheatCodes[code]) return alert("Invalid code");
- if(usedCheatCodes.includes(code)) return alert("Code already used");
- totalPoints+=cheatCodes[code];
- usedCheatCodes.push(code);
- save();
- pointsDisplay.textContent=totalPoints;
- alert("Code redeemed!");
-};
-
-shopBtn.onclick=()=>{
- shopOverlay.style.display="block";
- shopContainer.innerHTML="";
- skins.forEach(s=>{
-  let b=document.createElement("button");
-  b.className="skinBtn";
-  let owned=ownedSkins.includes(s.name);
-  b.textContent=owned?`${s.name} (Owned)`:`${s.name} - ${s.cost}`;
-  b.onclick=()=>{
-    if(!owned && totalPoints>=s.cost){
-      totalPoints-=s.cost;
-      ownedSkins.push(s.name);
+  pixels.forEach((p,i)=>{
+    if(p.rainbow){
+      let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
+      if(d<player.size/2+p.size/2){
+        player.rainbow=true; player.rainbowTimer=Date.now();
+        pixels.splice(i,1);
+      }
+      return;
     }
-    selectedSkin=s.name;
-    player.color=s.color;
-    save();
-    pointsDisplay.textContent=totalPoints;
-  };
-  shopContainer.appendChild(b);
- });
-};
 
-closeShopBtn.onclick=()=>shopOverlay.style.display="none";
+    if(!p.whiteShooter){
+      let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
+      p.x+=dx/d*p.speed; p.y+=dy/d*p.speed;
 
-function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
-onresize=()=>{w=c.width=innerWidth;h=c.height=innerHeight;}
+      if(d<player.size/2+p.size/2){
+        if(player.rainbow){
+          if(p.color==='red') score+=1;
+          if(p.color==='blue') score+=5;
+          if(p.color==='white') score+=10;
+          pixels.splice(i,1);
+        } else gameOver=true;
+      }
+    } else {
+      if(Date.now()-p.shootTimer>1500){
+        let dx=player.x-p.x; let dy=player.y-p.y; let d=Math.sqrt(dx*dx+dy*dy);
+        arrows.push({x:p.x,y:p.y,vx:dx/d*5,vy:dy/d*5,size:6});
+        p.shootTimer=Date.now();
+      }
+    }
+  });
+
+  arrows.forEach((a,ai)=>{
+    a.x+=a.vx; a.y+=a.vy;
+    let dx=player.x-a.x; let dy=player.y-a.y; let d=Math.sqrt(dx*dx+dy*dy);
+    if(d<player.size/2) gameOver=true;
+    if(a.x<0||a.x>w||a.y<0||a.y>h) arrows.splice(ai,1);
+  });
+
+  if(player.rainbow && Date.now()-player.rainbowTimer>25000) player.rainbow=false;
+
+  // --- SPAWN LOGIC ---
+  // Normal red pixels
+  if(Math.random()<0.005) spawnPixel(); 
+
+  // Blue pixels spawn at score >=50, rare
+  if(score>=50 && Math.random()<0.001) spawnPixel(true);
+
+  // White shooters spawn at score >=100, very rare
+  if(score>=100 && Math.random()<0.0005) spawnPixel(false,false,true);
+}
+
+// ------------------ LOOP ------------------
+function loop(){if(!gameRunning) return; update(); draw(); if(!gameOver) requestAnimationFrame(loop);}
+
+// ------------------ CONTROLS ------------------
+canvas.addEventListener('touchmove',e=>{e.preventDefault(); player.x=e.touches[0].clientX; player.y=e.touches[0].clientY;},{passive:false});
+canvas.addEventListener('mousemove',e=>{player.x=e.clientX; player.y=e.clientY;});
+
+// ------------------ START / RETRY ------------------
+let pixelSpawner, rainbowSpawner, scoreInterval;
+function startGame(){
+  gameRunning=true;
+  playBtn.style.display='none';
+  resetGame();
+  pixelSpawner=setInterval(()=>spawnPixel(),2500);
+  rainbowSpawner=setInterval(()=>{if(Math.random()<0.01) spawnRainbow();},1000);
+  scoreInterval=setInterval(()=>{if(!gameOver) score++;},1000);
+  loop();
+}
+
+playBtn.addEventListener('click',startGame);
+retryBtn.addEventListener('click',()=>{
+  totalPoints+=score;
+  saveProgress();
+  pointsDisplay.innerText=totalPoints;
+  resetGame();
+  startGame();
+});
+
+// ------------------ CHEAT ------------------
+cheatBtn.addEventListener('click',()=>{
+  if(rewardRedeemed){alert("Cheat already redeemed"); return;}
+  let code=prompt("Enter cheat code:");
+  if(code==='REWARDXD'){totalPoints+=200; rewardRedeemed=true; saveProgress(); pointsDisplay.innerText=totalPoints; alert("200 points added!");}
+  else alert("Invalid code");
+});
+
+// ------------------ SHOP ------------------
+shopBtn.addEventListener('click',openShop);
+closeShopBtn.addEventListener('click',()=>{shopOverlay.style.display='none'; draw();});
+
+function openShop(){
+  shopOverlay.style.display='block';
+  shopContainer.innerHTML='';
+
+  let sortedSkins = skins.slice().sort((a,b)=>a.cost-b.cost);
+
+  sortedSkins.forEach(s=>{
+    let card=document.createElement('div'); card.className='skinCard';
+    let preview=document.createElement('div'); preview.className='skinPreview'; preview.style.background=s.color;
+    let name=document.createElement('div'); name.className='skinName'; name.innerText=s.name;
+    let cost=document.createElement('div'); cost.className='skinCost'; let owned=ownedSkins.includes(s.name); cost.innerText=owned?'Owned':s.cost+' pts';
+    let btn=document.createElement('button'); btn.className='buyBtn'; btn.innerText=owned?'Select':'Buy';
+    btn.onclick=()=>{
+      if(!owned && totalPoints>=s.cost){totalPoints-=s.cost; ownedSkins.push(s.name); saveProgress(); pointsDisplay.innerText=totalPoints; cost.innerText='Owned'; btn.innerText='Select';}
+      selectedSkin=s.name; player.color=s.color; saveProgress();
+    };
+    card.appendChild(preview); card.appendChild(name); card.appendChild(cost); card.appendChild(btn);
+    shopContainer.appendChild(card);
+  });
+}
+
+// ------------------ RESIZE ------------------
+window.addEventListener('resize',()=>{ w=window.innerWidth; h=window.innerHeight; canvas.width=w; canvas.height=h; });
 </script>
 </body>
 </html>
