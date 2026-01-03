@@ -5,12 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dead Pixel</title>
 <style>
-html,body{
-  margin:0;
-  padding:0;
-  overflow:hidden;
-  background:black;
-}
+html,body{margin:0;padding:0;overflow:hidden;background:black;}
 canvas{display:block}
 button{
   position:absolute;
@@ -54,6 +49,7 @@ button{
   color:white;
   border:none;
   border-radius:8px;
+  cursor:pointer;
 }
 </style>
 </head>
@@ -93,9 +89,6 @@ const closeShop=document.getElementById("closeShop");
 let gameRunning=false;
 let gameOver=false;
 let score=0;
-let totalPoints=parseInt(localStorage.getItem("points")||0);
-pointsText.textContent=totalPoints;
-
 let pixels=[];
 
 // ---------------- PLAYER ----------------
@@ -121,6 +114,8 @@ const skins=[
 
 let ownedSkins=JSON.parse(localStorage.getItem("ownedSkins")||'["Red"]');
 let selectedSkin=localStorage.getItem("selectedSkin")||"Red";
+let totalPoints=parseInt(localStorage.getItem("points")||0);
+pointsText.textContent=totalPoints;
 
 // ---------------- SAVE ----------------
 function save(){
@@ -161,6 +156,7 @@ function draw(){
   ctx.fillStyle="white";
   ctx.font="20px Arial";
   ctx.fillText("Score: "+score,10,30);
+  ctx.fillText("Points: "+totalPoints,10,60);
 
   if(gameOver){
     retryBtn.style.display="block";
@@ -176,7 +172,7 @@ function draw(){
 function update(){
   if(gameOver) return;
 
-  pixels.forEach(p=>{
+  pixels.forEach((p,i)=>{
     let dx=player.x-p.x;
     let dy=player.y-p.y;
     let d=Math.hypot(dx,dy);
@@ -184,7 +180,9 @@ function update(){
       p.x+=dx/d*p.speed;
       p.y+=dy/d*p.speed;
     }
-    if(d<p.size) gameOver=true;
+    if(d<p.size){
+      gameOver=true;
+    }
   });
 
   if(Math.random()<0.02) spawnPixel("red");
@@ -218,10 +216,19 @@ playBtn.onclick=()=>{
   setInterval(()=>{if(!gameOver)score++},1000);
 };
 
+// Retry now restarts game directly
 retryBtn.onclick=()=>{
-  totalPoints+=score;
-  save();
-  location.reload();
+  gameRunning=true;
+  gameOver=false;
+  score=0;
+  pixels=[];
+  player.x=canvas.width/2;
+  player.y=canvas.height/2;
+  retryBtn.style.display="none";
+  shopBtn.style.display="none";
+  cheatBtn.style.display="none";
+  loop();
+  setInterval(()=>{if(!gameOver)score++},1000);
 };
 
 // ---- CHEAT (LIMITED PER CODE) ----
@@ -267,7 +274,7 @@ shopBtn.onclick=()=>{
       }
       selectedSkin=s.name;
       save();
-      shopBtn.onclick();
+      shopBtn.onclick(); // refresh shop
     };
 
     shopList.appendChild(btn);
@@ -275,6 +282,12 @@ shopBtn.onclick=()=>{
 };
 
 closeShop.onclick=()=>shopOverlay.style.display="none";
+
+// ---------------- RESIZE ----------------
+window.addEventListener("resize",()=>{
+  canvas.width=innerWidth;
+  canvas.height=innerHeight;
+});
 </script>
 </body>
 </html>
